@@ -4,6 +4,7 @@ const qs = require('querystring')
 const unescape = require('unescape')
 const hljs = require('highlight.js')
 const list = require('./list')
+const {formatUrl} = require('./utils')
 
 /* Your one stop shop for all your document processing needs. */
 
@@ -89,7 +90,7 @@ function normalizeHtml(html) {
       const {path: libraryPath} = isDoc ? list.getMeta(docId) || {} : {}
       const libraryDeepLink = deepLink && libraryPath ? `${libraryPath}#${deepLink}` : libraryPath
 
-      $(el).attr('href', libraryDeepLink || decoded)
+      $(el).attr('href', libraryDeepLink ? formatUrl(libraryDeepLink) : decoded)
     }
 
     return el
@@ -108,19 +109,25 @@ function formatCode(html) {
     // strip interior <p> tags added by google
     content = content.replace(/(?:<\/p><p>|<br\/?>)/g, '\n').replace(/<\/?p>/g, '').trim()
     // try to find language hint within text block
-    const [, lang] = content.match(/^([^\n]+)\n(.+)/) || []
-    if (lang) content = content.replace(`${lang}\n`, '')
+    const [, lang] = content.match(/^(.+?)\n/) || []
 
-    const formattedContent = formatCodeContent(content)
     if (lang && hljs.getLanguage(lang)) {
-      const textOnlyContent = cheerio.load(formattedContent).text()
+      // if the language hint exists and contains a valid language, remove it from the code block
+      content = content.replace(`${lang}\n`, '')
+
+      const textOnlyContent = cheerio.load(content).text()
       const highlighted = hljs.highlight(lang, textOnlyContent, true)
-      return `<pre><code data-lang="${highlighted.language}">${highlighted.value}</code></pre>`
+      return `<pre><code data-lang="${highlighted.language}">${formatCodeContent(highlighted.value)}</code></pre>`
     }
-    return `<pre><code>${formattedContent}</code></pre>`
+    return `<pre><code>${formatCodeContent(content)}</code></pre>`
   })
 
-  // Replace single backticks with <code>, as long as they are not inside triple backticks
+  // Replace double backticks with <code>, for supporting backticks in inline code blocks
+  html = html.replace(/``(.+?`?)``/g, (match, content) => {
+    return `<code>${formatCodeContent(content)}</code>`
+  })
+
+  // Replace single backticks with <code>
   html = html.replace(/`(.+?)`/g, (match, content) => {
     return `<code>${formatCodeContent(content)}</code>`
   })
